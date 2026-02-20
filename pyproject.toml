@@ -1,0 +1,20 @@
+[project]
+name = "auditrag"
+version = "0.1.0"
+description = "Production RAG system for financial document intelligence"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "pydantic-settings",
+    "psycopg[binary]",
+    "qdrant-client",
+    "sqlalchemy",
+    "uvicorn[standard]",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["auditrag"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
