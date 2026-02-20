@@ -13,6 +13,9 @@ dependencies = [
     "datasets",
     "pdfplumber",
     "httpx",
+    "openai",
+    "sentence-transformers",
+    "pytest",
 ]
 
 [tool.hatch.build.targets.wheel]

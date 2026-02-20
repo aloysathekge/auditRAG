@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     qdrant_host: str = "qdrant"
     qdrant_port: int = 6333
 
+    openai_api_key: str = ""
+    embedding_provider: str = "local"  # "local" or "openai"
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     @property
