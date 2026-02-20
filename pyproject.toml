@@ -10,6 +10,9 @@ dependencies = [
     "qdrant-client",
     "sqlalchemy",
     "uvicorn[standard]",
+    "datasets",
+    "pdfplumber",
+    "httpx",
 ]
 
 [tool.hatch.build.targets.wheel]

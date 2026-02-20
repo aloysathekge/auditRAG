@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 
 from auditrag.config import get_settings
-from auditrag.health import router as health_router
+from auditrag.api.health import router as health_router
 
 settings = get_settings()
 
