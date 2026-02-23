@@ -8,7 +8,11 @@ from auditrag.config import get_settings
 
 settings = get_settings()
 engine = create_engine(settings.postgres_url, future=True, pool_pre_ping=True)
-qdrant_client = QdrantClient(url=settings.qdrant_url)
+qdrant_client = QdrantClient(
+    url=settings.qdrant_url,
+    api_key=settings.qdrant_api_key or None,
+    check_compatibility=False,
+)
 
 router = APIRouter(tags=["health"])
 

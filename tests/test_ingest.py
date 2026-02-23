@@ -1,7 +1,13 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from auditrag.ingest import chunk_pages, embed_chunks, extract_text, download_pdf
+from auditrag.ingest import (
+    chunk_pages,
+    embed_chunks,
+    extract_text,
+    download_pdf,
+    upsert_chunks_to_qdrant,
+)
 
 
 class TestChunkPages:
@@ -108,6 +114,55 @@ class TestEmbedChunks:
 
         assert "embedding" in result[0]
         assert result[0]["embedding"] == fake_embedding
+
+
+class TestUpsertChunksToQdrant:
+    def test_raises_when_chunks_not_embedded(self):
+        chunks = [
+            {"chunk_id": "a", "doc_name": "d", "page": 1, "text": "x"},
+        ]
+        with patch("auditrag.ingest.get_settings"):
+            import pytest
+            with pytest.raises(ValueError, match="embedded first"):
+                upsert_chunks_to_qdrant(chunks)
+
+    def test_upserts_points_with_mocked_client(self):
+        chunks = [
+            {
+                "chunk_id": "doc_chunk_0",
+                "doc_name": "doc",
+                "page": 1,
+                "text": "revenue was high",
+                "embedding": [0.1] * 384,
+            },
+            {
+                "chunk_id": "doc_chunk_1",
+                "doc_name": "doc",
+                "page": 2,
+                "text": "net income",
+                "embedding": [0.2] * 384,
+            },
+        ]
+        mock_client = MagicMock()
+        mock_client.get_collections.return_value.collections = []  # no collection yet
+
+        with patch("auditrag.ingest.get_settings") as mock_settings:
+            mock_settings.return_value.qdrant_url = "http://localhost:6333"
+            with patch("auditrag.ingest.QdrantClient", return_value=mock_client):
+                n = upsert_chunks_to_qdrant(chunks)
+
+        assert n == 2
+        mock_client.create_collection.assert_called_once()
+        mock_client.upsert.assert_called_once()
+        call_kw = mock_client.upsert.call_args[1]
+        assert call_kw["collection_name"] == "auditrag_chunks"
+        assert len(call_kw["points"]) == 2
+        p = call_kw["points"][0]
+        assert p.payload["chunk_id"] == "doc_chunk_0"
+        assert p.payload["doc_name"] == "doc"
+        assert p.payload["page"] == 1
+        assert p.payload["text"] == "revenue was high"
+        assert len(p.vector) == 384
 
 
 class TestDownloadPdf:

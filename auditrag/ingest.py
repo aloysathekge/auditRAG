@@ -1,12 +1,18 @@
+import hashlib
 from pathlib import Path
 
 import httpx
 import pdfplumber
 from datasets import load_dataset
+from qdrant_client import QdrantClient
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 from auditrag.config import get_settings
 
 DATA_DIR = Path("data/financebench/pdfs")
+QDRANT_COLLECTION = "auditrag_chunks"
+QDRANT_UPSERT_BATCH_SIZE = 50
+QDRANT_TIMEOUT = 120
 
 
 def load_financebench():
@@ -143,6 +149,59 @@ def embed_chunks(chunks: list[dict]) -> list[dict]:
     return chunks
 
 
+def ensure_collection(client: QdrantClient, vector_size: int) -> None:
+    """Create the auditrag collection if it does not exist."""
+    collections = client.get_collections().collections
+    names = [c.name for c in collections]
+    if QDRANT_COLLECTION not in names:
+        client.create_collection(
+            collection_name=QDRANT_COLLECTION,
+            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+        )
+        print(f"  Created collection '{QDRANT_COLLECTION}' (size={vector_size})")
+    else:
+        print(f"  Using existing collection '{QDRANT_COLLECTION}'")
+
+
+def upsert_chunks_to_qdrant(chunks: list[dict]) -> int:
+    """Upload embedded chunks to Qdrant. Creates collection if needed. Returns count upserted."""
+    if not chunks or "embedding" not in chunks[0]:
+        raise ValueError("Chunks must be embedded first (call embed_chunks)")
+    settings = get_settings()
+    client = QdrantClient(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key or None,
+        check_compatibility=False,
+        timeout=QDRANT_TIMEOUT,
+    )
+    vector_size = len(chunks[0]["embedding"])
+    ensure_collection(client, vector_size)
+
+    points = []
+    for c in chunks:
+        point_id = int(hashlib.md5(c["chunk_id"].encode()).hexdigest()[:16], 16)
+        points.append(
+            PointStruct(
+                id=point_id,
+                vector=c["embedding"],
+                payload={
+                    "chunk_id": c["chunk_id"],
+                    "doc_name": c["doc_name"],
+                    "page": c["page"],
+                    "text": c["text"],
+                },
+            )
+        )
+
+    total = 0
+    for i in range(0, len(points), QDRANT_UPSERT_BATCH_SIZE):
+        batch = points[i : i + QDRANT_UPSERT_BATCH_SIZE]
+        client.upsert(collection_name=QDRANT_COLLECTION, points=batch)
+        total += len(batch)
+        print(f"  Upserted batch {i // QDRANT_UPSERT_BATCH_SIZE + 1} ({total}/{len(points)} points)")
+    return total
+
+
 if __name__ == "__main__":
     ds = load_financebench()
     print(f"Total records: {len(ds)}")
@@ -165,8 +224,10 @@ if __name__ == "__main__":
     chunks = chunk_pages(pages, doc_name)
     print(f"Created {len(chunks)} chunks")
 
-    # Step 4: Embed (only first 3 chunks as demo to save cost)
-    demo_chunks = chunks[:3]
-    demo_chunks = embed_chunks(demo_chunks)
-    print(f"\nEmbedding dimension: {len(demo_chunks[0]['embedding'])}")
-    print(f"First 5 values: {demo_chunks[0]['embedding'][:5]}")
+    # Step 4: Embed
+    chunks = embed_chunks(chunks)
+    print(f"Embedding dimension: {len(chunks[0]['embedding'])}")
+
+    # Step 5: Upsert to Qdrant
+    upsert_chunks_to_qdrant(chunks)
+    print("Done.")
