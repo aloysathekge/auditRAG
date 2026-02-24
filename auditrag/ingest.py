@@ -149,6 +149,16 @@ def embed_chunks(chunks: list[dict]) -> list[dict]:
     return chunks
 
 
+def embed_texts(texts: list[str]) -> list[list[float]]:
+    """Embed a list of texts (e.g. a query). Uses same provider as embed_chunks."""
+    settings = get_settings()
+    if not texts:
+        return []
+    if settings.embedding_provider == "openai":
+        return _embed_openai(texts)
+    return _embed_local(texts)
+
+
 def ensure_collection(client: QdrantClient, vector_size: int) -> None:
     """Create the auditrag collection if it does not exist."""
     collections = client.get_collections().collections
