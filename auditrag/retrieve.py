@@ -31,19 +31,37 @@ def search(query: str, top_k: int = 5) -> list[dict]:
 
 
 if __name__ == "__main__":
+    import argparse
     import sys
 
-    if len(sys.argv) > 1:
-        question = " ".join(sys.argv[1:])
-    else:
-        question = input("Question: ").strip()
+    parser = argparse.ArgumentParser(description="Query auditRAG: retrieve chunks and optionally generate an answer.")
+    parser.add_argument("question", nargs="*", help="Question (or leave empty to type when prompted)")
+    parser.add_argument("-a", "--answer", action="store_true", help="Generate LLM answer from chunks (needs OPENAI_API_KEY)")
+    parser.add_argument("-k", "--top-k", type=int, default=5, help="Number of chunks to retrieve (default: 5)")
+    args = parser.parse_args()
+
+    question = " ".join(args.question).strip() if args.question else input("Question: ").strip()
     if not question:
         print("No question given.")
         sys.exit(1)
 
     print("Searching...")
-    results = search(question, top_k=5)
+    results = search(question, top_k=args.top_k)
     print(f"Found {len(results)} chunks\n")
+
+    if args.answer:
+        from auditrag.generate import generate_answer
+        gen = generate_answer(question, results)
+        if gen:
+            print("--- Answer ---")
+            print(gen["answer"])
+            print("\n--- Sources ---")
+            for s in gen["sources"]:
+                print(f"  {s['doc_name']} p{s['page']}")
+            print()
+        else:
+            print("(Set OPENAI_API_KEY in .env to generate an answer.)\n")
+
     for i, r in enumerate(results, 1):
         preview = r["text"][:400] + "..." if len(r["text"]) > 400 else r["text"]
         print(f"--- Chunk {i} (score={r['score']:.4f}, {r['doc_name']} p{r['page']}) ---")
