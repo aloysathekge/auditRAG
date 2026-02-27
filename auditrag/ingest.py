@@ -5,7 +5,7 @@ import httpx
 import pdfplumber
 from datasets import load_dataset
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 
 from auditrag.config import get_settings
 
@@ -159,6 +159,21 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return _embed_local(texts)
 
 
+def doc_already_ingested(client: QdrantClient, doc_name: str) -> bool:
+    """Return True if at least one chunk for this doc_name exists in Qdrant."""
+    try:
+        result, _ = client.scroll(
+            collection_name=QDRANT_COLLECTION,
+            scroll_filter=Filter(must=[FieldCondition(key="doc_name", match=MatchValue(value=doc_name))]),
+            limit=1,
+            with_payload=False,
+            with_vectors=False,
+        )
+        return len(result) > 0
+    except Exception:
+        return False
+
+
 def ensure_collection(client: QdrantClient, vector_size: int) -> None:
     """Create the auditrag collection if it does not exist."""
     collections = client.get_collections().collections
@@ -173,8 +188,8 @@ def ensure_collection(client: QdrantClient, vector_size: int) -> None:
         print(f"  Using existing collection '{QDRANT_COLLECTION}'")
 
 
-def upsert_chunks_to_qdrant(chunks: list[dict]) -> int:
-    """Upload embedded chunks to Qdrant. Creates collection if needed. Returns count upserted."""
+def upsert_chunks_to_qdrant(chunks: list[dict], skip_if_doc_exists: bool = True) -> int:
+    """Upload embedded chunks to Qdrant. Creates collection if needed. Returns count upserted (0 if skipped)."""
     if not chunks or "embedding" not in chunks[0]:
         raise ValueError("Chunks must be embedded first (call embed_chunks)")
     settings = get_settings()
@@ -184,6 +199,10 @@ def upsert_chunks_to_qdrant(chunks: list[dict]) -> int:
         check_compatibility=False,
         timeout=QDRANT_TIMEOUT,
     )
+    doc_name = chunks[0]["doc_name"]
+    if skip_if_doc_exists and doc_already_ingested(client, doc_name):
+        print(f"  Skipping upsert: '{doc_name}' already in Qdrant (use skip_if_doc_exists=False to re-ingest).")
+        return 0
     vector_size = len(chunks[0]["embedding"])
     ensure_collection(client, vector_size)
 

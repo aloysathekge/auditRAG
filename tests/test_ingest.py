@@ -145,6 +145,7 @@ class TestUpsertChunksToQdrant:
         ]
         mock_client = MagicMock()
         mock_client.get_collections.return_value.collections = []  # no collection yet
+        mock_client.scroll.return_value = ([], None)  # doc not yet ingested
 
         with patch("auditrag.ingest.get_settings") as mock_settings:
             mock_settings.return_value.qdrant_url = "http://localhost:6333"
@@ -163,6 +164,21 @@ class TestUpsertChunksToQdrant:
         assert p.payload["page"] == 1
         assert p.payload["text"] == "revenue was high"
         assert len(p.vector) == 384
+
+    def test_skips_upsert_when_doc_already_ingested(self):
+        chunks = [
+            {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "x", "embedding": [0.1] * 384},
+        ]
+        mock_client = MagicMock()
+        mock_client.scroll.return_value = ([MagicMock()], None)  # one point already exists for this doc
+
+        with patch("auditrag.ingest.get_settings") as mock_settings:
+            mock_settings.return_value.qdrant_url = "http://localhost:6333"
+            with patch("auditrag.ingest.QdrantClient", return_value=mock_client):
+                n = upsert_chunks_to_qdrant(chunks, skip_if_doc_exists=True)
+
+        assert n == 0
+        mock_client.upsert.assert_not_called()
 
 
 class TestDownloadPdf:

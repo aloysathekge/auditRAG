@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -29,14 +31,19 @@ def get_query(question: str = "", top_k: int = 5, generate_answer: bool = True) 
 
 
 def _run_query(question: str, top_k: int, do_generate: bool) -> dict:
+    t0 = time.perf_counter()
     try:
         chunks = search(question, top_k=top_k)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Retrieval failed: {e!s}")
+    retrieve_ms = round((time.perf_counter() - t0) * 1000)
 
-    out = {"question": question, "chunks": chunks}
+    out = {"question": question, "chunks": chunks, "latency_ms": {"retrieve_ms": retrieve_ms, "total_ms": retrieve_ms}}
     if do_generate:
+        t1 = time.perf_counter()
         gen = generate_answer(question, chunks)
+        generate_ms = round((time.perf_counter() - t1) * 1000)
+        out["latency_ms"] = {"retrieve_ms": retrieve_ms, "generate_ms": generate_ms, "total_ms": retrieve_ms + generate_ms}
         if gen:
             out["answer"] = gen["answer"]
             out["sources"] = gen["sources"]
