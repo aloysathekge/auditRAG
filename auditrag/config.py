@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     openai_api_key: str = ""
     anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-5-20250929"  # override via ANTHROPIC_MODEL if needed
     embedding_provider: str = "local"  # "local" or "openai"
     generation_provider: str = "openai"  # "openai" or "anthropic"
 

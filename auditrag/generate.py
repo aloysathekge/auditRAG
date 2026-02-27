@@ -27,11 +27,11 @@ def _build_context(chunks: list[dict]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def _call_openai(question: str, context: str, api_key: str) -> str:
+def _call_openai(question: str, context: str, api_key: str, model:str) -> str:
     client = OpenAI(api_key=api_key)
     user_msg = USER_PROMPT_TEMPLATE.format(context=context, question=question)
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
@@ -41,11 +41,11 @@ def _call_openai(question: str, context: str, api_key: str) -> str:
     return (response.choices[0].message.content or "").strip()
 
 
-def _call_anthropic(question: str, context: str, api_key: str) -> str:
+def _call_anthropic(question: str, context: str, api_key: str, model: str) -> str:
     client = anthropic.Anthropic(api_key=api_key)
     user_msg = USER_PROMPT_TEMPLATE.format(context=context, question=question)
     resp = client.messages.create(
-        model="claude-3-5-sonnet-latest",
+        model=model,
         max_tokens=700,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_msg}],
@@ -71,7 +71,8 @@ def generate_answer(question: str, chunks: list[dict]) -> dict | None:
     answer_text: str | None = None
 
     if provider == "anthropic" and settings.anthropic_api_key:
-        answer_text = _call_anthropic(question, context, settings.anthropic_api_key)
+        model = getattr(settings, "anthropic_model", "claude-sonnet-4-5-20250929") or "claude-sonnet-4-5-20250929"
+        answer_text = _call_anthropic(question, context, settings.anthropic_api_key, model)
     elif settings.openai_api_key:
         # Default: OpenAI if key is present
         answer_text = _call_openai(question, context, settings.openai_api_key)
