@@ -1,6 +1,7 @@
-"""Generate an answer from retrieved chunks using an LLM."""
+"""Generate an answer from retrieved chunks using an LLM (OpenAI or Anthropic)."""
 
 from openai import OpenAI
+import anthropic
 
 from auditrag.config import get_settings
 
@@ -26,18 +27,9 @@ def _build_context(chunks: list[dict]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def generate_answer(question: str, chunks: list[dict]) -> dict | None:
-    """Call the LLM with question + chunks. Returns {answer, sources} or None if no API key."""
-    settings = get_settings()
-    if not settings.openai_api_key:
-        return None
-    if not chunks:
-        return {"answer": "No relevant context was retrieved.", "sources": []}
-
-    context = _build_context(chunks)
+def _call_openai(question: str, context: str, api_key: str) -> str:
+    client = OpenAI(api_key=api_key)
     user_msg = USER_PROMPT_TEMPLATE.format(context=context, question=question)
-
-    client = OpenAI(api_key=settings.openai_api_key)
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -46,7 +38,47 @@ def generate_answer(question: str, chunks: list[dict]) -> dict | None:
         ],
         temperature=0.1,
     )
-    answer_text = response.choices[0].message.content or ""
+    return (response.choices[0].message.content or "").strip()
+
+
+def _call_anthropic(question: str, context: str, api_key: str) -> str:
+    client = anthropic.Anthropic(api_key=api_key)
+    user_msg = USER_PROMPT_TEMPLATE.format(context=context, question=question)
+    resp = client.messages.create(
+        model="claude-3-5-sonnet-latest",
+        max_tokens=700,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_msg}],
+        temperature=0.1,
+    )
+    parts: list[str] = []
+    for block in resp.content:
+        if block.type == "text":
+            parts.append(block.text)
+    return "\n".join(parts).strip()
+
+
+def generate_answer(question: str, chunks: list[dict]) -> dict | None:
+    """Call the configured LLM with question + chunks. Returns {answer, sources} or None if no key."""
+    settings = get_settings()
+
+    if not chunks:
+        return {"answer": "No relevant context was retrieved.", "sources": []}
+
+    context = _build_context(chunks)
+
+    provider = (getattr(settings, "generation_provider", "openai") or "openai").lower()
+    answer_text: str | None = None
+
+    if provider == "anthropic" and settings.anthropic_api_key:
+        answer_text = _call_anthropic(question, context, settings.anthropic_api_key)
+    elif settings.openai_api_key:
+        # Default: OpenAI if key is present
+        answer_text = _call_openai(question, context, settings.openai_api_key)
+
+    if answer_text is None:
+        # No usable key configured
+        return None
 
     sources = [{"doc_name": c["doc_name"], "page": c["page"]} for c in chunks]
-    return {"answer": answer_text.strip(), "sources": sources}
+    return {"answer": answer_text, "sources": sources}

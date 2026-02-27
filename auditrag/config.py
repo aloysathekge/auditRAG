@@ -21,7 +21,9 @@ class Settings(BaseSettings):
     qdrant_api_key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.6QignS8_MbzUV-HEWkwWV9zyYdMwW2HVddlZg1uCmG0"  # required for Qdrant Cloud
 
     openai_api_key: str = ""
+    anthropic_api_key: str = ""
     embedding_provider: str = "local"  # "local" or "openai"
+    generation_provider: str = "openai"  # "openai" or "anthropic"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
