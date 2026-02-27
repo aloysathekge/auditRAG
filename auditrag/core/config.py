@@ -17,14 +17,14 @@ class Settings(BaseSettings):
 
     qdrant_host: str = "qdrant"
     qdrant_port: int = 6333
-    qdrant_url_override: str = "https://68ee8d70-cbc4-49d5-90ef-0e6f69c63340.eu-west-1-0.aws.cloud.qdrant.io"  
-    qdrant_api_key: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.6QignS8_MbzUV-HEWkwWV9zyYdMwW2HVddlZg1uCmG0"  # required for Qdrant Cloud
+    qdrant_url_override: str = ""
+    qdrant_api_key: str = ""
 
     openai_api_key: str = ""
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-4-5-20250929"  # override via ANTHROPIC_MODEL if needed
-    embedding_provider: str = "local"  # "local" or "openai"
-    generation_provider: str = "openai"  # "openai" or "anthropic"
+    anthropic_model: str = "claude-sonnet-4-5-20250929"
+    embedding_provider: str = "local"
+    generation_provider: str = "openai"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

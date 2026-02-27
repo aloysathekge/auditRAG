@@ -1,13 +1,11 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from qdrant_client import QdrantClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
 
-from auditrag.config import get_settings
+from auditrag.core.config import get_settings
+from auditrag.db.session import check_postgres
 
 settings = get_settings()
-engine = create_engine(settings.postgres_url, future=True, pool_pre_ping=True)
 qdrant_client = QdrantClient(
     url=settings.qdrant_url,
     api_key=settings.qdrant_api_key or None,
@@ -17,21 +15,12 @@ qdrant_client = QdrantClient(
 router = APIRouter(tags=["health"])
 
 
-def check_postgres() -> tuple[bool, str | None]:
-    try:
-        with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
-        return True, None
-    except SQLAlchemyError as error:
-        return False, str(error)
-
-
 def check_qdrant() -> tuple[bool, str | None]:
     try:
         qdrant_client.get_collections()
         return True, None
-    except Exception as error:  # noqa: BLE001
-        return False, str(error)
+    except Exception as e:
+        return False, str(e)
 
 
 def run_dependency_checks() -> dict:

@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from auditrag.ingest import (
+from auditrag.ingestion import (
     chunk_pages,
     embed_chunks,
     extract_text,
@@ -82,7 +82,7 @@ class TestEmbedChunks:
             {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "revenue was 100 million"},
             {"chunk_id": "doc_chunk_1", "doc_name": "doc", "page": 1, "text": "net income increased"},
         ]
-        with patch("auditrag.ingest.get_settings") as mock_settings:
+        with patch("auditrag.ingestion.embedder.get_settings") as mock_settings:
             mock_settings.return_value.embedding_provider = "local"
             result = embed_chunks(chunks)
 
@@ -103,7 +103,7 @@ class TestEmbedChunks:
         fake_response.data = [fake_item]
 
         with (
-            patch("auditrag.ingest.get_settings") as mock_settings,
+            patch("auditrag.ingestion.embedder.get_settings") as mock_settings,
             patch("openai.OpenAI") as mock_openai_cls,
         ):
             mock_settings.return_value.embedding_provider = "openai"
@@ -121,7 +121,7 @@ class TestUpsertChunksToQdrant:
         chunks = [
             {"chunk_id": "a", "doc_name": "d", "page": 1, "text": "x"},
         ]
-        with patch("auditrag.ingest.get_settings"):
+        with patch("auditrag.ingestion.embedder.get_settings"):
             import pytest
             with pytest.raises(ValueError, match="embedded first"):
                 upsert_chunks_to_qdrant(chunks)
@@ -144,12 +144,12 @@ class TestUpsertChunksToQdrant:
             },
         ]
         mock_client = MagicMock()
-        mock_client.get_collections.return_value.collections = []  # no collection yet
-        mock_client.scroll.return_value = ([], None)  # doc not yet ingested
+        mock_client.get_collections.return_value.collections = []
+        mock_client.scroll.return_value = ([], None)
 
-        with patch("auditrag.ingest.get_settings") as mock_settings:
+        with patch("auditrag.ingestion.embedder.get_settings") as mock_settings:
             mock_settings.return_value.qdrant_url = "http://localhost:6333"
-            with patch("auditrag.ingest.QdrantClient", return_value=mock_client):
+            with patch("auditrag.ingestion.embedder.QdrantClient", return_value=mock_client):
                 n = upsert_chunks_to_qdrant(chunks)
 
         assert n == 2
@@ -170,11 +170,11 @@ class TestUpsertChunksToQdrant:
             {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "x", "embedding": [0.1] * 384},
         ]
         mock_client = MagicMock()
-        mock_client.scroll.return_value = ([MagicMock()], None)  # one point already exists for this doc
+        mock_client.scroll.return_value = ([MagicMock()], None)
 
-        with patch("auditrag.ingest.get_settings") as mock_settings:
+        with patch("auditrag.ingestion.embedder.get_settings") as mock_settings:
             mock_settings.return_value.qdrant_url = "http://localhost:6333"
-            with patch("auditrag.ingest.QdrantClient", return_value=mock_client):
+            with patch("auditrag.ingestion.embedder.QdrantClient", return_value=mock_client):
                 n = upsert_chunks_to_qdrant(chunks, skip_if_doc_exists=True)
 
         assert n == 0
@@ -186,7 +186,7 @@ class TestDownloadPdf:
         pdf_file = tmp_path / "test_doc.pdf"
         pdf_file.write_bytes(b"%PDF-fake")
 
-        with patch("auditrag.ingest.DATA_DIR", tmp_path):
+        with patch("auditrag.ingestion.loader.DATA_DIR", tmp_path):
             result = download_pdf("http://example.com/fake.pdf", "test_doc")
 
         assert result == pdf_file
@@ -197,7 +197,7 @@ class TestDownloadPdf:
         fake_response.raise_for_status = MagicMock()
 
         with (
-            patch("auditrag.ingest.DATA_DIR", tmp_path),
+            patch("auditrag.ingestion.loader.DATA_DIR", tmp_path),
             patch("httpx.get", return_value=fake_response) as mock_get,
         ):
             result = download_pdf("http://example.com/doc.pdf", "new_doc")

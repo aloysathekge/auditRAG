@@ -1,18 +1,12 @@
 import time
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
 
-from auditrag.generate import generate_answer
-from auditrag.retrieve import search
+from auditrag.generation.llm import generate_answer
+from auditrag.retrieval.dense import search
+from auditrag.schemas.query import QueryRequest
 
 router = APIRouter(tags=["query"])
-
-
-class QueryRequest(BaseModel):
-    question: str = Field(..., min_length=1, description="Natural language question")
-    top_k: int = Field(5, ge=1, le=20, description="Number of chunks to return")
-    generate_answer: bool = Field(True, description="If true, return LLM answer + sources (requires OPENAI_API_KEY)")
 
 
 @router.post("/query")
@@ -23,7 +17,7 @@ def post_query(body: QueryRequest) -> dict:
 
 @router.get("/query")
 def get_query(question: str = "", top_k: int = 5, generate_answer: bool = True) -> dict:
-    """Same as POST but with query params. Example: GET /query?question=What+was+3M+capital+expenditure"""
+    """Same as POST but with query params."""
     if not question or not question.strip():
         raise HTTPException(status_code=400, detail="question is required (e.g. ?question=...)")
     top_k = max(1, min(top_k, 20))
@@ -47,4 +41,8 @@ def _run_query(question: str, top_k: int, do_generate: bool) -> dict:
         if gen:
             out["answer"] = gen["answer"]
             out["sources"] = gen["sources"]
+            if gen.get("usage") is not None:
+                out["usage"] = gen["usage"]
+            if gen.get("cost_usd") is not None:
+                out["cost_usd"] = gen["cost_usd"]
     return out
