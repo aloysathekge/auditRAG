@@ -16,6 +16,8 @@ dependencies = [
     "openai",
     "anthropic",
     "sentence-transformers",
+    "rank-bm25",
+    "cohere",
     "pytest",
 ]
 

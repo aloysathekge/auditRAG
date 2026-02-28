@@ -4,7 +4,7 @@ import sys
 import time
 
 from auditrag.generation.llm import generate_answer
-from auditrag.retrieval.dense import search
+from auditrag.retrieval import search
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Query auditRAG: retrieve chunks and optionally generate an answer.")

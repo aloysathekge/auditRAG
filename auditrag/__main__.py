@@ -3,7 +3,7 @@ import sys
 import time
 
 from auditrag.generation.llm import generate_answer
-from auditrag.retrieval.dense import search
+from auditrag.retrieval import search
 
 TOP_K = 5
 

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-5-20250929"
     embedding_provider: str = "local"
     generation_provider: str = "openai"
+    retrieval_mode: str = "hybrid"  # "dense" | "sparse" | "hybrid"
+    use_reranker: bool = False
+    cohere_api_key: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

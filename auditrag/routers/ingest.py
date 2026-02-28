@@ -9,6 +9,7 @@ from auditrag.ingestion import (
     upsert_chunks_to_qdrant,
     load_financebench,
 )
+from auditrag.retrieval.sparse import invalidate_sparse_cache
 from auditrag.schemas.ingest import IngestRequest
 
 router = APIRouter(tags=["ingest"])
@@ -30,6 +31,8 @@ def post_ingest(body: IngestRequest, skip_if_exists: bool = True) -> dict:
     """Ingest a single document by URL. Returns chunks_created and chunks_upserted."""
     try:
         result = _run_pipeline(body.doc_name, body.doc_link, skip_if_exists=skip_if_exists)
+        if result["chunks_upserted"] > 0:
+            invalidate_sparse_cache()
         return {"status": "ok", **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -51,6 +54,8 @@ def post_ingest_financebench(index: int = 0, skip_if_exists: bool = True) -> dic
     doc_link = sample["doc_link"]
     try:
         result = _run_pipeline(doc_name, doc_link, skip_if_exists=skip_if_exists)
+        if result["chunks_upserted"] > 0:
+            invalidate_sparse_cache()
         return {"status": "ok", **result}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

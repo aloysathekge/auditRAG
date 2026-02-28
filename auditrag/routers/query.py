@@ -3,7 +3,7 @@ import time
 from fastapi import APIRouter, HTTPException
 
 from auditrag.generation.llm import generate_answer
-from auditrag.retrieval.dense import search
+from auditrag.retrieval import search
 from auditrag.schemas.query import QueryRequest
 
 router = APIRouter(tags=["query"])
