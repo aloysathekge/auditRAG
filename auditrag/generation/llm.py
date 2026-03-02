@@ -79,4 +79,5 @@ def generate_answer(question: str, chunks: list[dict]) -> dict | None:
         "sources": sources,
         "usage": usage,
         "cost_usd": round(cost, 6) if cost is not None else None,
+        "model_used": model_used or None,
     }

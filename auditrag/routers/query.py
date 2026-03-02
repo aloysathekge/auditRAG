@@ -3,6 +3,7 @@ import time
 from fastapi import APIRouter, HTTPException
 
 from auditrag.generation.llm import generate_answer
+from auditrag.observability.telemetry import log_query
 from auditrag.retrieval import search
 from auditrag.schemas.query import QueryRequest
 
@@ -33,6 +34,9 @@ def _run_query(question: str, top_k: int, do_generate: bool) -> dict:
     retrieve_ms = round((time.perf_counter() - t0) * 1000)
 
     out = {"question": question, "chunks": chunks, "latency_ms": {"retrieve_ms": retrieve_ms, "total_ms": retrieve_ms}}
+    generate_ms = None
+    cost_usd = None
+    model_used = None
     if do_generate:
         t1 = time.perf_counter()
         gen = generate_answer(question, chunks)
@@ -45,4 +49,19 @@ def _run_query(question: str, top_k: int, do_generate: bool) -> dict:
                 out["usage"] = gen["usage"]
             if gen.get("cost_usd") is not None:
                 out["cost_usd"] = gen["cost_usd"]
+            cost_usd = gen.get("cost_usd")
+            model_used = gen.get("model_used")
+        else:
+            cost_usd = None
+            model_used = None
+
+    total_ms = out["latency_ms"]["total_ms"]
+    log_query(
+        question=question,
+        total_ms=total_ms,
+        retrieve_ms=retrieve_ms,
+        generate_ms=generate_ms,
+        cost_usd=cost_usd,
+        model_used=model_used,
+    )
     return out
