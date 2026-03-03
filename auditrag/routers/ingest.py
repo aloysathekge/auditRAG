@@ -61,3 +61,51 @@ def post_ingest_financebench(index: int = 0, skip_if_exists: bool = True) -> dic
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Ingestion failed: {e!s}")
+
+
+@router.post("/ingest/financebench/bulk")
+def post_ingest_financebench_bulk(
+    limit: int = 10,
+    start: int = 0,
+    skip_if_exists: bool = True,
+) -> dict:
+    """Ingest multiple FinanceBench documents. Deduplicates by doc_name (dataset has duplicate rows)."""
+    ds = load_financebench()
+    total = len(ds)
+    start_idx = max(0, start)
+    end_idx = min(start_idx + limit, total)
+    if start_idx >= total:
+        raise HTTPException(
+            status_code=400,
+            detail=f"start={start} beyond dataset size ({total})",
+        )
+    seen: set[str] = set()
+    to_ingest: list[tuple[str, str]] = []
+    for i in range(start_idx, end_idx):
+        sample = ds[i]
+        doc_name = sample["doc_name"]
+        doc_link = sample["doc_link"]
+        if doc_name in seen:
+            continue
+        seen.add(doc_name)
+        to_ingest.append((doc_name, doc_link))
+    results = []
+    any_upserted = False
+    try:
+        for doc_name, doc_link in to_ingest:
+            result = _run_pipeline(doc_name, doc_link, skip_if_exists=skip_if_exists)
+            results.append(result)
+            if result["chunks_upserted"] > 0:
+                any_upserted = True
+        if any_upserted:
+            invalidate_sparse_cache()
+        return {
+            "status": "ok",
+            "range_indices": end_idx - start_idx,
+            "unique_docs": len(to_ingest),
+            "results": results,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Ingestion failed: {e!s}")
