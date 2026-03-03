@@ -10,3 +10,4 @@ __pycache__/
 postgres_data/
 qdrant_data/
 data/
+eval_results/
