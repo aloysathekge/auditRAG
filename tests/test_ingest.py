@@ -82,14 +82,21 @@ class TestEmbedChunks:
             {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "revenue was 100 million"},
             {"chunk_id": "doc_chunk_1", "doc_name": "doc", "page": 1, "text": "net income increased"},
         ]
-        with patch("auditrag.ingestion.embedder.get_settings") as mock_settings:
+        fake_vectors = [[0.1] * 384, [0.2] * 384]
+        fake_model = MagicMock()
+        fake_model.encode.return_value = MagicMock(tolist=lambda: fake_vectors)
+
+        with (
+            patch("auditrag.ingestion.embedder.get_settings") as mock_settings,
+            patch("auditrag.ingestion.embedder._get_local_model", return_value=fake_model),
+        ):
             mock_settings.return_value.embedding_provider = "local"
             result = embed_chunks(chunks)
 
         assert len(result) == 2
         assert "embedding" in result[0]
         assert isinstance(result[0]["embedding"], list)
-        assert len(result[0]["embedding"]) > 0
+        assert len(result[0]["embedding"]) == 384
         assert all(isinstance(v, float) for v in result[0]["embedding"])
 
     def test_openai_embedding_calls_api(self):
