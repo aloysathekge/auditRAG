@@ -11,3 +11,4 @@ postgres_data/
 qdrant_data/
 data/
 eval_results/
+auditrag_key.pem
