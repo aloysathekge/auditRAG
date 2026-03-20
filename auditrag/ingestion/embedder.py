@@ -180,20 +180,18 @@ def delete_doc_from_qdrant(doc_name: str, knowledge_base: str = "default") -> in
 
 
 def list_docs_in_qdrant(knowledge_base: str | None = None) -> list[dict]:
-    """List unique documents in Qdrant, optionally filtered by knowledge_base."""
+    """List unique documents in Qdrant, optionally filtered by knowledge_base.
+
+    Filtering is done in Python after scrolling to avoid issues with
+    unindexed payload fields in Qdrant.
+    """
     client = _get_client()
     try:
-        conditions = []
-        if knowledge_base is not None:
-            conditions.append(FieldCondition(key="knowledge_base", match=MatchValue(value=knowledge_base)))
-        scroll_filter = Filter(must=conditions) if conditions else None
-
         doc_counts: dict[str, dict] = {}
         offset = None
         while True:
             result, next_offset = client.scroll(
                 collection_name=QDRANT_COLLECTION,
-                scroll_filter=scroll_filter,
                 limit=200,
                 offset=offset,
                 with_payload=True,
@@ -203,6 +201,8 @@ def list_docs_in_qdrant(knowledge_base: str | None = None) -> list[dict]:
                 payload = pt.payload or {}
                 doc_name = payload.get("doc_name", "")
                 kb = payload.get("knowledge_base", "default")
+                if knowledge_base is not None and kb != knowledge_base:
+                    continue
                 key = f"{kb}::{doc_name}"
                 if key not in doc_counts:
                     doc_counts[key] = {"doc_name": doc_name, "knowledge_base": kb, "chunks_count": 0}
