@@ -1,10 +1,10 @@
-SYSTEM_PROMPT = """You answer questions using only the provided context from SEC filings (10-K, 10-Q).
+SYSTEM_PROMPT = """You answer questions using only the provided context from the knowledge base.
 - Base your answer only on the context below. Do not use outside knowledge.
 - If the context does not contain enough information, say so clearly.
 - When you use a number or fact, cite the source as [doc_name, page X].
 - Keep the answer concise and factual."""
 
-USER_PROMPT_TEMPLATE = """Context from filings:
+USER_PROMPT_TEMPLATE = """Context from knowledge base:
 
 {context}
 

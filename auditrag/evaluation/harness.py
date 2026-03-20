@@ -1,24 +1,21 @@
-"""Run FinanceBench Q&A through the full pipeline and collect results."""
+"""Run evaluation against auto-generated Q&A pairs from ingested documents."""
 import json
 import time
 from datetime import datetime
 from pathlib import Path
 
+from auditrag.db.models import QAPair
+from auditrag.db.session import SessionLocal
 from auditrag.generation.llm import generate_answer
 from auditrag.retrieval import search
 
 RESULTS_DIR = Path("eval_results")
 
 
-def _normalize(s: str) -> str:
-    """Lowercase, strip, collapse whitespace for comparison."""
-    return " ".join((s or "").lower().split())
-
-
-def run_one(question: str, top_k: int = 5) -> dict:
+def run_one(question: str, top_k: int = 5, knowledge_base: str | None = None) -> dict:
     """Run retrieve + generate for one question. Returns result dict."""
     t0 = time.perf_counter()
-    chunks = search(question, top_k=top_k)
+    chunks = search(question, top_k=top_k, knowledge_base=knowledge_base)
     retrieve_ms = round((time.perf_counter() - t0) * 1000)
 
     t1 = time.perf_counter()
@@ -39,45 +36,68 @@ def run_one(question: str, top_k: int = 5) -> dict:
     }
 
 
+def load_qa_pairs(
+    doc_name: str | None = None,
+    knowledge_base: str | None = None,
+    limit: int | None = None,
+) -> list[dict]:
+    """Load auto-generated Q&A pairs from the database."""
+    session = SessionLocal()
+    try:
+        query = session.query(QAPair)
+        if doc_name:
+            query = query.filter(QAPair.doc_name == doc_name)
+        if knowledge_base:
+            query = query.filter(QAPair.knowledge_base == knowledge_base)
+        if limit:
+            query = query.limit(limit)
+        rows = query.all()
+        return [
+            {
+                "question": r.question,
+                "gold_answer": r.answer,
+                "doc_name": r.doc_name,
+                "knowledge_base": r.knowledge_base,
+                "chunk_id": r.chunk_id,
+            }
+            for r in rows
+        ]
+    finally:
+        session.close()
+
+
 def run_harness(
+    doc_name: str | None = None,
+    knowledge_base: str | None = None,
     limit: int | None = 10,
     top_k: int = 5,
-    dataset_split: str = "train",
 ) -> list[dict]:
-    """
-    Load FinanceBench, run each question through search + generate, return list of result dicts.
-    limit: max number of examples (None = all). Use small limit for quick runs.
-    """
-    from datasets import load_dataset
+    """Load Q&A pairs from DB, run each through search + generate, return results."""
+    qa_pairs = load_qa_pairs(doc_name=doc_name, knowledge_base=knowledge_base, limit=limit)
+    if not qa_pairs:
+        return []
 
-    ds = load_dataset("PatronusAI/financebench", split=dataset_split)
-    n = len(ds) if limit is None else min(limit, len(ds))
     results = []
-
-    for i in range(n):
-        row = ds[i]
-        question = (row.get("question") or "").strip()
-        if not question:
-            continue
-        gold_answer = (row.get("answer") or "").strip()
-        out = run_one(question, top_k=top_k)
-        out["gold_answer"] = gold_answer
+    for pair in qa_pairs:
+        out = run_one(pair["question"], top_k=top_k, knowledge_base=knowledge_base)
+        out["gold_answer"] = pair["gold_answer"]
+        out["source_doc"] = pair["doc_name"]
         results.append(out)
 
     return results
 
 
 def run_eval(
+    doc_name: str | None = None,
+    knowledge_base: str | None = None,
     limit: int | None = 10,
     top_k: int = 5,
     save_json: bool = True,
 ) -> dict:
-    """
-    Run harness, compute metrics, optionally save results to JSON, return summary.
-    """
+    """Run harness, compute metrics, optionally save results to JSON, return summary."""
     from auditrag.evaluation.metrics import compute_metrics
 
-    results = run_harness(limit=limit, top_k=top_k)
+    results = run_harness(doc_name=doc_name, knowledge_base=knowledge_base, limit=limit, top_k=top_k)
     metrics = compute_metrics(results)
 
     if save_json and results:

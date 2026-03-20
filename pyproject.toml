@@ -1,7 +1,7 @@
 [project]
 name = "auditrag"
 version = "0.1.0"
-description = "Production RAG system for financial document intelligence"
+description = "General-purpose RAG knowledge base system"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi",
@@ -12,6 +12,7 @@ dependencies = [
     "uvicorn[standard]",
     "datasets",
     "pdfplumber",
+    "python-multipart",
     "httpx",
     "openai",
     "anthropic",

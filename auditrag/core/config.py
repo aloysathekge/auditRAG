@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     retrieval_mode: str = "hybrid"  # "dense" | "sparse" | "hybrid"
     use_reranker: bool = False
     cohere_api_key: str = ""
+    upload_dir: str = "data/uploads"
+    max_upload_size_mb: int = 50
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 

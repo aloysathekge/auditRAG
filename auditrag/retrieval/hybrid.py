@@ -14,11 +14,11 @@ def _rrf_score(ranks: list[int], k: int = RRF_K) -> float:
     return sum(1.0 / (k + r) for r in ranks)
 
 
-def search_hybrid(query: str, top_k: int = 5) -> list[dict]:
+def search_hybrid(query: str, top_k: int = 5, knowledge_base: str | None = None) -> list[dict]:
     """Dense + sparse with Reciprocal Rank Fusion. Returns top_k fused results."""
     fetch_k = max(top_k * 3, 20)
-    dense = search_dense(query, top_k=fetch_k)
-    sparse = search_sparse(query, top_k=fetch_k)
+    dense = search_dense(query, top_k=fetch_k, knowledge_base=knowledge_base)
+    sparse = search_sparse(query, top_k=fetch_k, knowledge_base=knowledge_base)
 
     rrf_scores: dict[tuple, tuple[dict, list[int]]] = {}
 

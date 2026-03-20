@@ -19,8 +19,16 @@ class TestChunkPages:
 
         assert len(chunks) > 1
         assert chunks[0]["doc_name"] == "test_doc"
-        assert chunks[0]["chunk_id"] == "test_doc_chunk_0"
+        assert chunks[0]["chunk_id"] == "default_test_doc_chunk_0"
         assert chunks[0]["page"] == 1
+        assert chunks[0]["knowledge_base"] == "default"
+
+    def test_chunk_with_custom_knowledge_base(self):
+        pages = [{"page": 1, "text": "hello world this is a test"}]
+        chunks = chunk_pages(pages, "doc", chunk_size=100, chunk_overlap=0, knowledge_base="my_kb")
+
+        assert chunks[0]["knowledge_base"] == "my_kb"
+        assert chunks[0]["chunk_id"].startswith("my_kb_")
 
     def test_chunk_text_not_empty(self):
         pages = [{"page": 1, "text": "hello world this is a test"}]
@@ -79,8 +87,8 @@ class TestExtractText:
 class TestEmbedChunks:
     def test_local_embedding_adds_vectors(self):
         chunks = [
-            {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "revenue was 100 million"},
-            {"chunk_id": "doc_chunk_1", "doc_name": "doc", "page": 1, "text": "net income increased"},
+            {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "revenue was 100 million", "knowledge_base": "default"},
+            {"chunk_id": "doc_chunk_1", "doc_name": "doc", "page": 1, "text": "net income increased", "knowledge_base": "default"},
         ]
         fake_vectors = [[0.1] * 384, [0.2] * 384]
         fake_model = MagicMock()
@@ -101,7 +109,7 @@ class TestEmbedChunks:
 
     def test_openai_embedding_calls_api(self):
         chunks = [
-            {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "test text"},
+            {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "test text", "knowledge_base": "default"},
         ]
         fake_embedding = [0.1] * 1536
         fake_item = MagicMock()
@@ -141,6 +149,7 @@ class TestUpsertChunksToQdrant:
                 "page": 1,
                 "text": "revenue was high",
                 "embedding": [0.1] * 384,
+                "knowledge_base": "default",
             },
             {
                 "chunk_id": "doc_chunk_1",
@@ -148,6 +157,7 @@ class TestUpsertChunksToQdrant:
                 "page": 2,
                 "text": "net income",
                 "embedding": [0.2] * 384,
+                "knowledge_base": "default",
             },
         ]
         mock_client = MagicMock()
@@ -156,6 +166,7 @@ class TestUpsertChunksToQdrant:
 
         with patch("auditrag.ingestion.embedder.get_settings") as mock_settings:
             mock_settings.return_value.qdrant_url = "http://localhost:6333"
+            mock_settings.return_value.qdrant_api_key = ""
             with patch("auditrag.ingestion.embedder.QdrantClient", return_value=mock_client):
                 n = upsert_chunks_to_qdrant(chunks)
 
@@ -170,17 +181,19 @@ class TestUpsertChunksToQdrant:
         assert p.payload["doc_name"] == "doc"
         assert p.payload["page"] == 1
         assert p.payload["text"] == "revenue was high"
+        assert p.payload["knowledge_base"] == "default"
         assert len(p.vector) == 384
 
     def test_skips_upsert_when_doc_already_ingested(self):
         chunks = [
-            {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "x", "embedding": [0.1] * 384},
+            {"chunk_id": "doc_chunk_0", "doc_name": "doc", "page": 1, "text": "x", "embedding": [0.1] * 384, "knowledge_base": "default"},
         ]
         mock_client = MagicMock()
         mock_client.scroll.return_value = ([MagicMock()], None)
 
         with patch("auditrag.ingestion.embedder.get_settings") as mock_settings:
             mock_settings.return_value.qdrant_url = "http://localhost:6333"
+            mock_settings.return_value.qdrant_api_key = ""
             with patch("auditrag.ingestion.embedder.QdrantClient", return_value=mock_client):
                 n = upsert_chunks_to_qdrant(chunks, skip_if_doc_exists=True)
 

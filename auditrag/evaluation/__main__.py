@@ -1,17 +1,24 @@
-"""Run evaluation: uv run python -m auditrag.evaluation [--limit N] [--no-save]"""
+"""Run evaluation: uv run python -m auditrag.evaluation [--doc DOC_NAME] [--kb KB] [--limit N] [--no-save]"""
 import argparse
 
 from auditrag.evaluation.harness import run_eval
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run FinanceBench evaluation harness.")
-    parser.add_argument("--limit", type=int, default=10, help="Max number of questions (default 10, use 0 for all)")
+    parser = argparse.ArgumentParser(description="Run evaluation against auto-generated Q&A pairs.")
+    parser.add_argument("--doc", type=str, default=None, help="Evaluate only this document")
+    parser.add_argument("--kb", type=str, default=None, help="Filter by knowledge base")
+    parser.add_argument("--limit", type=int, default=10, help="Max number of Q&A pairs (default 10, use 0 for all)")
     parser.add_argument("--no-save", action="store_true", help="Do not save results JSON")
     args = parser.parse_args()
 
     limit = None if args.limit == 0 else args.limit
-    metrics = run_eval(limit=limit, save_json=not args.no_save)
+    metrics = run_eval(
+        doc_name=args.doc,
+        knowledge_base=args.kb,
+        limit=limit,
+        save_json=not args.no_save,
+    )
 
     print("\n--- Evaluation summary ---")
     print(f"  count:            {metrics['count']}")

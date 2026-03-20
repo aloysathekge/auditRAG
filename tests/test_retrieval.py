@@ -26,7 +26,7 @@ def test_search_uses_dense_when_mode_dense():
         out = search("what is revenue?", top_k=5)
 
     assert out == dense_result
-    mock_dense.assert_called_once()
+    mock_dense.assert_called_once_with("what is revenue?", top_k=5, knowledge_base=None)
     mock_sparse.assert_not_called()
     mock_hybrid.assert_not_called()
     mock_rerank.assert_not_called()
@@ -45,7 +45,7 @@ def test_search_uses_sparse_when_mode_sparse():
         out = search("what is revenue?", top_k=5)
 
     assert out == sparse_result
-    mock_sparse.assert_called_once()
+    mock_sparse.assert_called_once_with("what is revenue?", top_k=5, knowledge_base=None)
     mock_dense.assert_not_called()
     mock_hybrid.assert_not_called()
     mock_rerank.assert_not_called()
@@ -54,7 +54,6 @@ def test_search_uses_sparse_when_mode_sparse():
 def test_search_uses_hybrid_by_default_and_when_mode_hybrid():
     hybrid_result = [_make_chunk("hybrid")]
 
-    # Explicit hybrid
     with (
         patch("auditrag.retrieval.search.get_settings", return_value=DummySettings("hybrid", False)),
         patch("auditrag.retrieval.search.search_dense") as mock_dense,
@@ -65,7 +64,7 @@ def test_search_uses_hybrid_by_default_and_when_mode_hybrid():
         out1 = search("question", top_k=3)
 
     assert out1 == hybrid_result
-    mock_hybrid.assert_called_once()
+    mock_hybrid.assert_called_once_with("question", top_k=3, knowledge_base=None)
     mock_dense.assert_not_called()
     mock_sparse.assert_not_called()
     mock_rerank.assert_not_called()
@@ -101,3 +100,17 @@ def test_search_calls_reranker_when_enabled_and_chunks_present():
     assert out == reranked
     mock_rerank.assert_called_once()
 
+
+def test_search_passes_knowledge_base_to_dense():
+    dense_result = [_make_chunk("dense")]
+
+    with (
+        patch("auditrag.retrieval.search.get_settings", return_value=DummySettings("dense", False)),
+        patch("auditrag.retrieval.search.search_dense", return_value=dense_result) as mock_dense,
+        patch("auditrag.retrieval.search.search_sparse") as mock_sparse,
+        patch("auditrag.retrieval.search.search_hybrid") as mock_hybrid,
+        patch("auditrag.retrieval.search.rerank_chunks") as mock_rerank,
+    ):
+        out = search("question", top_k=5, knowledge_base="my_kb")
+
+    mock_dense.assert_called_once_with("question", top_k=5, knowledge_base="my_kb")

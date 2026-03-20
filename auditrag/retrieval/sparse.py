@@ -6,21 +6,22 @@ from rank_bm25 import BM25Okapi
 from auditrag.ingestion.embedder import QDRANT_COLLECTION, QDRANT_TIMEOUT
 from auditrag.core.config import get_settings
 from qdrant_client import QdrantClient
+from qdrant_client.models import FieldCondition, Filter, MatchValue
 
 
 def _tokenize(text: str) -> list[str]:
     return re.findall(r"\w+", text.lower())
 
 
-_corpus_cache: list[dict] | None = None
-_bm25_index: BM25Okapi | None = None
+# Cache keyed by knowledge_base (None = all)
+_cache: dict[str | None, tuple[list[dict], BM25Okapi]] = {}
 
 
-def _build_index() -> tuple[list[dict], BM25Okapi]:
-    """Load all chunks from Qdrant and build BM25 index. Cached."""
-    global _corpus_cache, _bm25_index
-    if _corpus_cache is not None and _bm25_index is not None:
-        return _corpus_cache, _bm25_index
+def _build_index(knowledge_base: str | None = None) -> tuple[list[dict], BM25Okapi]:
+    """Load chunks from Qdrant and build BM25 index. Cached per knowledge_base."""
+    global _cache
+    if knowledge_base in _cache:
+        return _cache[knowledge_base]
 
     settings = get_settings()
     client = QdrantClient(
@@ -29,11 +30,19 @@ def _build_index() -> tuple[list[dict], BM25Okapi]:
         check_compatibility=False,
         timeout=QDRANT_TIMEOUT,
     )
+
+    scroll_filter = None
+    if knowledge_base is not None:
+        scroll_filter = Filter(
+            must=[FieldCondition(key="knowledge_base", match=MatchValue(value=knowledge_base))]
+        )
+
     corpus: list[dict] = []
     offset = None
     while True:
         result, next_offset = client.scroll(
             collection_name=QDRANT_COLLECTION,
+            scroll_filter=scroll_filter,
             limit=200,
             offset=offset,
             with_payload=True,
@@ -52,26 +61,25 @@ def _build_index() -> tuple[list[dict], BM25Okapi]:
         offset = next_offset
 
     if not corpus:
-        _corpus_cache = []
-        _bm25_index = BM25Okapi([[]])
-        return _corpus_cache, _bm25_index
+        bm25 = BM25Okapi([[]])
+        _cache[knowledge_base] = ([], bm25)
+        return [], bm25
 
     tokenized_corpus = [_tokenize(c["text"]) for c in corpus]
-    _corpus_cache = corpus
-    _bm25_index = BM25Okapi(tokenized_corpus)
-    return _corpus_cache, _bm25_index
+    bm25 = BM25Okapi(tokenized_corpus)
+    _cache[knowledge_base] = (corpus, bm25)
+    return corpus, bm25
 
 
 def invalidate_sparse_cache() -> None:
     """Call after ingesting new docs so BM25 index is rebuilt on next search."""
-    global _corpus_cache, _bm25_index
-    _corpus_cache = None
-    _bm25_index = None
+    global _cache
+    _cache.clear()
 
 
-def search_sparse(query: str, top_k: int = 5) -> list[dict]:
+def search_sparse(query: str, top_k: int = 5, knowledge_base: str | None = None) -> list[dict]:
     """BM25 search over Qdrant corpus. Returns same shape as dense.search()."""
-    corpus, bm25 = _build_index()
+    corpus, bm25 = _build_index(knowledge_base)
     if not corpus:
         return []
 

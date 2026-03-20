@@ -60,3 +60,21 @@ def test_post_query_calls_retrieval_and_generation():
 
     mock_log_query.assert_called_once()
 
+
+def test_post_query_with_knowledge_base():
+    fake_chunks = [{"doc_name": "doc", "page": 1, "text": "some text", "score": 0.9}]
+
+    with (
+        patch("auditrag.routers.query.search", return_value=fake_chunks) as mock_search,
+        patch("auditrag.routers.query.generate_answer", return_value=None),
+        patch("auditrag.routers.query.log_query"),
+    ):
+        resp = client.post("/query", json={
+            "question": "What is this?",
+            "top_k": 3,
+            "generate_answer": False,
+            "knowledge_base": "my_kb",
+        })
+
+    assert resp.status_code == 200
+    mock_search.assert_called_once_with("What is this?", top_k=3, knowledge_base="my_kb")

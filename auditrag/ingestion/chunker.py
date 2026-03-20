@@ -3,6 +3,7 @@ def chunk_pages(
     doc_name: str,
     chunk_size: int = 512,
     chunk_overlap: int = 50,
+    knowledge_base: str = "default",
 ) -> list[dict]:
     """Split extracted pages into overlapping chunks with metadata.
 
@@ -31,10 +32,11 @@ def chunk_pages(
                 source_page = page_num
 
         chunks.append({
-            "chunk_id": f"{doc_name}_chunk_{len(chunks)}",
+            "chunk_id": f"{knowledge_base}_{doc_name}_chunk_{len(chunks)}",
             "doc_name": doc_name,
             "page": source_page,
             "text": chunk_text,
+            "knowledge_base": knowledge_base,
         })
 
         idx += chunk_size - chunk_overlap

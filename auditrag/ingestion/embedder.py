@@ -68,12 +68,25 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
     return _embed_local(texts)
 
 
-def doc_already_ingested(client: QdrantClient, doc_name: str) -> bool:
+def _get_client() -> QdrantClient:
+    settings = get_settings()
+    return QdrantClient(
+        url=settings.qdrant_url,
+        api_key=settings.qdrant_api_key or None,
+        check_compatibility=False,
+        timeout=QDRANT_TIMEOUT,
+    )
+
+
+def doc_already_ingested(client: QdrantClient, doc_name: str, knowledge_base: str | None = None) -> bool:
     """Return True if at least one chunk for this doc_name exists in Qdrant."""
     try:
+        conditions = [FieldCondition(key="doc_name", match=MatchValue(value=doc_name))]
+        if knowledge_base is not None:
+            conditions.append(FieldCondition(key="knowledge_base", match=MatchValue(value=knowledge_base)))
         result, _ = client.scroll(
             collection_name=QDRANT_COLLECTION,
-            scroll_filter=Filter(must=[FieldCondition(key="doc_name", match=MatchValue(value=doc_name))]),
+            scroll_filter=Filter(must=conditions),
             limit=1,
             with_payload=False,
             with_vectors=False,
@@ -101,15 +114,10 @@ def upsert_chunks_to_qdrant(chunks: list[dict], skip_if_doc_exists: bool = True)
     """Upload embedded chunks to Qdrant. Returns count upserted (0 if skipped)."""
     if not chunks or "embedding" not in chunks[0]:
         raise ValueError("Chunks must be embedded first (call embed_chunks)")
-    settings = get_settings()
-    client = QdrantClient(
-        url=settings.qdrant_url,
-        api_key=settings.qdrant_api_key or None,
-        check_compatibility=False,
-        timeout=QDRANT_TIMEOUT,
-    )
+    client = _get_client()
     doc_name = chunks[0]["doc_name"]
-    if skip_if_doc_exists and doc_already_ingested(client, doc_name):
+    knowledge_base = chunks[0].get("knowledge_base")
+    if skip_if_doc_exists and doc_already_ingested(client, doc_name, knowledge_base):
         print(f"  Skipping upsert: '{doc_name}' already in Qdrant (use skip_if_doc_exists=False to re-ingest).")
         return 0
     vector_size = len(chunks[0]["embedding"])
@@ -118,16 +126,18 @@ def upsert_chunks_to_qdrant(chunks: list[dict], skip_if_doc_exists: bool = True)
     points = []
     for c in chunks:
         point_id = int(hashlib.md5(c["chunk_id"].encode()).hexdigest()[:16], 16)
+        payload = {
+            "chunk_id": c["chunk_id"],
+            "doc_name": c["doc_name"],
+            "page": c["page"],
+            "text": c["text"],
+            "knowledge_base": c.get("knowledge_base", "default"),
+        }
         points.append(
             PointStruct(
                 id=point_id,
                 vector=c["embedding"],
-                payload={
-                    "chunk_id": c["chunk_id"],
-                    "doc_name": c["doc_name"],
-                    "page": c["page"],
-                    "text": c["text"],
-                },
+                payload=payload,
             )
         )
 
@@ -138,3 +148,69 @@ def upsert_chunks_to_qdrant(chunks: list[dict], skip_if_doc_exists: bool = True)
         total += len(batch)
         print(f"  Upserted batch {i // QDRANT_UPSERT_BATCH_SIZE + 1} ({total}/{len(points)} points)")
     return total
+
+
+def delete_doc_from_qdrant(doc_name: str, knowledge_base: str = "default") -> int:
+    """Delete all chunks for a doc_name + knowledge_base. Returns count deleted."""
+    client = _get_client()
+    try:
+        # Count before delete
+        conditions = [
+            FieldCondition(key="doc_name", match=MatchValue(value=doc_name)),
+            FieldCondition(key="knowledge_base", match=MatchValue(value=knowledge_base)),
+        ]
+        scroll_filter = Filter(must=conditions)
+        points, _ = client.scroll(
+            collection_name=QDRANT_COLLECTION,
+            scroll_filter=scroll_filter,
+            limit=1,
+            with_payload=False,
+            with_vectors=False,
+        )
+        if not points:
+            return 0
+
+        client.delete(
+            collection_name=QDRANT_COLLECTION,
+            points_selector=scroll_filter,
+        )
+        return -1  # Qdrant delete doesn't return count; -1 signals success
+    except Exception:
+        return 0
+
+
+def list_docs_in_qdrant(knowledge_base: str | None = None) -> list[dict]:
+    """List unique documents in Qdrant, optionally filtered by knowledge_base."""
+    client = _get_client()
+    try:
+        conditions = []
+        if knowledge_base is not None:
+            conditions.append(FieldCondition(key="knowledge_base", match=MatchValue(value=knowledge_base)))
+        scroll_filter = Filter(must=conditions) if conditions else None
+
+        doc_counts: dict[str, dict] = {}
+        offset = None
+        while True:
+            result, next_offset = client.scroll(
+                collection_name=QDRANT_COLLECTION,
+                scroll_filter=scroll_filter,
+                limit=200,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,
+            )
+            for pt in result:
+                payload = pt.payload or {}
+                doc_name = payload.get("doc_name", "")
+                kb = payload.get("knowledge_base", "default")
+                key = f"{kb}::{doc_name}"
+                if key not in doc_counts:
+                    doc_counts[key] = {"doc_name": doc_name, "knowledge_base": kb, "chunks_count": 0}
+                doc_counts[key]["chunks_count"] += 1
+            if next_offset is None:
+                break
+            offset = next_offset
+
+        return list(doc_counts.values())
+    except Exception:
+        return []

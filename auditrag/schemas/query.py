@@ -8,3 +8,7 @@ class QueryRequest(BaseModel):
         True,
         description="If true, return LLM answer + sources (requires OPENAI_API_KEY or ANTHROPIC_API_KEY)",
     )
+    knowledge_base: str | None = Field(
+        None,
+        description="Knowledge base to search within. None searches all.",
+    )
