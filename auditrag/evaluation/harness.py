@@ -19,7 +19,7 @@ def run_one(question: str, top_k: int = 5, knowledge_base: str | None = None) ->
     retrieve_ms = round((time.perf_counter() - t0) * 1000)
 
     t1 = time.perf_counter()
-    gen = generate_answer(question, chunks)
+    gen = generate_answer(question, chunks, mode="concise")
     generate_ms = round((time.perf_counter() - t1) * 1000) if gen else 0
 
     answer = (gen.get("answer") or "").strip() if gen else ""
