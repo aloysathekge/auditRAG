@@ -1,7 +1,7 @@
 import hashlib
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PayloadSchemaType, PointStruct, VectorParams
 
 from auditrag.core.config import get_settings
 
@@ -97,7 +97,7 @@ def doc_already_ingested(client: QdrantClient, doc_name: str, knowledge_base: st
 
 
 def ensure_collection(client: QdrantClient, vector_size: int) -> None:
-    """Create the auditrag collection if it does not exist."""
+    """Create the auditrag collection if it does not exist, and ensure payload indexes."""
     collections = client.get_collections().collections
     names = [c.name for c in collections]
     if QDRANT_COLLECTION not in names:
@@ -108,6 +108,17 @@ def ensure_collection(client: QdrantClient, vector_size: int) -> None:
         print(f"  Created collection '{QDRANT_COLLECTION}' (size={vector_size})")
     else:
         print(f"  Using existing collection '{QDRANT_COLLECTION}'")
+
+    # Ensure payload indexes for filtered queries
+    for field in ("knowledge_base", "doc_name"):
+        try:
+            client.create_payload_index(
+                collection_name=QDRANT_COLLECTION,
+                field_name=field,
+                field_schema=PayloadSchemaType.KEYWORD,
+            )
+        except Exception:
+            pass  # Index may already exist
 
 
 def upsert_chunks_to_qdrant(chunks: list[dict], skip_if_doc_exists: bool = True) -> int:

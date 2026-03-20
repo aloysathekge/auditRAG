@@ -16,12 +16,39 @@ from auditrag.routers.evaluate import router as evaluate_router
 settings = get_settings()
 
 
+def _ensure_qdrant_indexes():
+    """Create payload indexes on existing Qdrant collection at startup."""
+    try:
+        from qdrant_client import QdrantClient
+        from qdrant_client.models import PayloadSchemaType
+        from auditrag.ingestion.embedder import QDRANT_COLLECTION
+        client = QdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key or None,
+            check_compatibility=False,
+        )
+        collections = [c.name for c in client.get_collections().collections]
+        if QDRANT_COLLECTION in collections:
+            for field in ("knowledge_base", "doc_name"):
+                try:
+                    client.create_payload_index(
+                        collection_name=QDRANT_COLLECTION,
+                        field_name=field,
+                        field_schema=PayloadSchemaType.KEYWORD,
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
         init_db()
     except Exception:
         pass
+    _ensure_qdrant_indexes()
     yield
 
 
