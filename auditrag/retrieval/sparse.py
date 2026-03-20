@@ -77,7 +77,7 @@ def invalidate_sparse_cache() -> None:
     _cache.clear()
 
 
-def search_sparse(query: str, top_k: int = 5, knowledge_base: str | None = None) -> list[dict]:
+def search_sparse(query: str, top_k: int = 5, knowledge_base: str | None = None, doc_name: str | None = None) -> list[dict]:
     """BM25 search over Qdrant corpus. Returns same shape as dense.search()."""
     corpus, bm25 = _build_index(knowledge_base)
     if not corpus:
@@ -85,15 +85,21 @@ def search_sparse(query: str, top_k: int = 5, knowledge_base: str | None = None)
 
     query_tokens = _tokenize(query)
     scores = bm25.get_scores(query_tokens)
-    indices = scores.argsort()[::-1][:top_k]
+    indices = scores.argsort()[::-1]
 
-    return [
-        {
+    results = []
+    for i in indices:
+        if scores[i] <= 0:
+            break
+        if doc_name is not None and corpus[i]["doc_name"] != doc_name:
+            continue
+        results.append({
             "text": corpus[i]["text"],
             "doc_name": corpus[i]["doc_name"],
             "page": corpus[i]["page"],
-            "score": float(scores[indices[i]]),
-        }
-        for i in range(len(indices))
-        if scores[indices[i]] > 0
-    ]
+            "score": float(scores[i]),
+        })
+        if len(results) >= top_k:
+            break
+
+    return results

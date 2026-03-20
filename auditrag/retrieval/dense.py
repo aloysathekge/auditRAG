@@ -5,7 +5,7 @@ from auditrag.core.config import get_settings
 from auditrag.ingestion.embedder import QDRANT_COLLECTION, QDRANT_TIMEOUT, embed_texts
 
 
-def search(query: str, top_k: int = 5, knowledge_base: str | None = None) -> list[dict]:
+def search(query: str, top_k: int = 5, knowledge_base: str | None = None, doc_name: str | None = None) -> list[dict]:
     """Embed the query, search Qdrant, return top_k chunks with text, doc_name, page, score."""
     settings = get_settings()
     client = QdrantClient(
@@ -16,11 +16,12 @@ def search(query: str, top_k: int = 5, knowledge_base: str | None = None) -> lis
     )
     query_vector = embed_texts([query])[0]
 
-    query_filter = None
+    conditions = []
     if knowledge_base is not None:
-        query_filter = Filter(
-            must=[FieldCondition(key="knowledge_base", match=MatchValue(value=knowledge_base))]
-        )
+        conditions.append(FieldCondition(key="knowledge_base", match=MatchValue(value=knowledge_base)))
+    if doc_name is not None:
+        conditions.append(FieldCondition(key="doc_name", match=MatchValue(value=doc_name)))
+    query_filter = Filter(must=conditions) if conditions else None
 
     response = client.query_points(
         collection_name=QDRANT_COLLECTION,

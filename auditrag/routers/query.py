@@ -13,7 +13,7 @@ router = APIRouter(tags=["query"])
 @router.post("/query")
 def post_query(body: QueryRequest) -> dict:
     """Retrieve chunks and optionally generate an answer with citations."""
-    return _run_query(body.question.strip(), body.top_k, body.generate_answer, body.knowledge_base)
+    return _run_query(body.question.strip(), body.top_k, body.generate_answer, body.knowledge_base, body.doc_name)
 
 
 @router.get("/query")
@@ -30,10 +30,10 @@ def get_query(
     return _run_query(question.strip(), top_k, generate_answer, knowledge_base)
 
 
-def _run_query(question: str, top_k: int, do_generate: bool, knowledge_base: str | None = None) -> dict:
+def _run_query(question: str, top_k: int, do_generate: bool, knowledge_base: str | None = None, doc_name: str | None = None) -> dict:
     t0 = time.perf_counter()
     try:
-        chunks = search(question, top_k=top_k, knowledge_base=knowledge_base)
+        chunks = search(question, top_k=top_k, knowledge_base=knowledge_base, doc_name=doc_name)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Retrieval failed: {e!s}")
     retrieve_ms = round((time.perf_counter() - t0) * 1000)

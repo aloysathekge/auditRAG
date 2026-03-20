@@ -12,3 +12,7 @@ class QueryRequest(BaseModel):
         None,
         description="Knowledge base to search within. None searches all.",
     )
+    doc_name: str | None = Field(
+        None,
+        description="Filter retrieval to a specific document. None searches all docs.",
+    )
