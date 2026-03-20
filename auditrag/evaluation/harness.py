@@ -108,4 +108,5 @@ def run_eval(
             json.dump({"metrics": metrics, "results": results}, f, indent=2)
         metrics["results_path"] = str(path)
 
+    metrics["details"] = results
     return metrics
