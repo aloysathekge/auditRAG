@@ -1,8 +1,21 @@
 """Compute evaluation metrics from harness results."""
+import re
+
+
+def clean_answer(text: str) -> str:
+    """Strip formatting artifacts before scoring."""
+    # Remove markdown bold/italic
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    # Remove citations like [doc_name, page N]
+    text = re.sub(r'\[.+?\]', '', text)
+    # Remove trailing periods and whitespace
+    text = text.strip().rstrip('.')
+    return text
 
 
 def _normalize(s: str) -> str:
-    return " ".join((s or "").lower().split())
+    return " ".join(clean_answer(s or "").lower().split())
 
 
 def token_f1(pred: str, gold: str) -> float:
